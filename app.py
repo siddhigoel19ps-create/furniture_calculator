@@ -1,4 +1,4 @@
-=============================================================================
+# =============================================================================
 # Heritage Oak Furniture Studio - Furniture Cost Calculator (Version 2)
 # Course : Python Programming for Business Students (End-Term Project)
 # Tools : Python + Streamlit (no external database)
