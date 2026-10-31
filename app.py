@@ -90,6 +90,37 @@ PRESETS = {
 }
 
 
+# Three named designs for each furniture category. These are visual choices;
+# the original category-based price calculation remains unchanged.
+PRODUCT_DESIGNS = {
+  "Sofa": [
+    ("The Alder Lounge", "Contemporary 3-seater", "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=900&q=85"),
+    ("The Camden Curve", "Soft, rounded statement sofa", "https://images.unsplash.com/photo-1550254478-ead4f891c7f?auto=format&fit=crop&w=900&q=85"),
+    ("The Rowan Classic", "Timeless tailored sofa", "https://images.unsplash.com/photo-1550254478-ead4f891c7f?auto=format&fit=crop&w=900&q=85"),
+  ],
+  "Bed": [
+    ("The Haven Bed", "Warm upholstered headboard", "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=85"),
+    ("The Solstice Frame", "Minimal natural-wood frame", "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?auto=format&fit=crop&w=900&q=85"),
+    ("The Willow Retreat", "Soft, relaxed bedroom style", "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=900&q=85"),
+  ],
+  "Dining Table": [
+    ("The Gather Table", "Classic family dining table", "https://images.unsplash.com/photo-1617806118233-18e1de247200?auto=format&fit=crop&w=900&q=85"),
+    ("The Arden Dining Set", "Modern clean-lined design", "https://images.unsplash.com/photo-1604578762246-41134e37f9cc?auto=format&fit=crop&w=900&q=85"),
+    ("The Oakridge Table", "Natural wood dining style", "https://images.unsplash.com/photo-1617104678098-de229db51175?auto=format&fit=crop&w=900&q=85"),
+  ],
+  "Wardrobe": [
+    ("The Elara Wardrobe", "Elegant full-height storage", "https://images.unsplash.com/photo-1595428774223-ef52624120d2?auto=format&fit=crop&w=900&q=85"),
+    ("The Linden Closet", "Minimal built-in look", "https://images.unsplash.com/photo-1558997510-83ea9252edf8?auto=format&fit=crop&w=900&q=85"),
+    ("The Sora Wardrobe", "Warm contemporary finish", "https://images.unsplash.com/photo-1595514535415-dae9e2f5f6f3?auto=format&fit=crop&w=900&q=85"),
+  ],
+  "Study Table": [
+    ("The Focus Desk", "Simple everyday workstation", "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=85"),
+    ("The Atelier Desk", "Modern creative workspace", "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?auto=format&fit=crop&w=900&q=85"),
+    ("The Scholar Table", "Compact study-room design", "https://images.unsplash.com/photo-1499951360447-b19be8fe80f5?auto=format&fit=crop&w=900&q=85"),
+  ],
+}
+
+
 # -----------------------------------------------------------------------------
 # 3. HELPER FUNCTIONS
 # -----------------------------------------------------------------------------
@@ -355,13 +386,6 @@ for col, (name, price, image_url) in zip(product_cols, products):
   with col:
     st.markdown(f'<div class="product-card"><img src="{image_url}" alt="{name} furniture"><div class="product-copy"><div class="product-name">{name}</div><div class="product-price">{price}</div></div></div>', unsafe_allow_html=True)
 st.write("")
-st.markdown("### How it works")
-steps = [("01", "Choose your piece", "Select a furniture category from our collection."), ("02", "Make it yours", "Choose material, size and quantity, then add customization if needed."), ("03", "Select delivery", "Choose standard or express delivery for your order."), ("04", "See your estimate", "Review the itemized calculation, applicable savings and final estimate." )]
-step_cols = st.columns(4, gap="medium")
-for col, (number, title, description) in zip(step_cols, steps):
-  with col:
-    st.markdown(f'<div class="step-card"><div class="step-number">{number}</div><div class="step-title">{title}</div><div>{description}</div></div>', unsafe_allow_html=True)
-st.write("")
 st.markdown("### A little more about our approach")
 st.markdown('<p class="section-intro">We make it easier to plan your furniture purchase with clear pricing, flexible choices and an estimate that updates as you build your order.</p>', unsafe_allow_html=True)
 review_cols = st.columns(2, gap="medium")
@@ -369,12 +393,9 @@ with review_cols[0]:
   st.markdown('<div class="review-card"><div class="eyebrow">Sample review layout · Not a real testimonial</div><div class="review-stars"></div><b>“Thoughtful design and clear pricing.”</b><p>This is placeholder text to demonstrate how customer feedback will appear. Replace it with a genuine customer review after receiving permission.</p><small>Customer name to be added with permission</small></div>', unsafe_allow_html=True)
 with review_cols[1]:
   st.markdown('<div class="review-card"><div class="eyebrow">Sample review layout · Not a real testimonial</div><div class="review-stars"></div><b>“A simple way to plan a furniture order.”</b><p>This is placeholder text only, not an actual customer review. Add verified feedback here when available.</p><small>Customer name to be added with permission</small></div>', unsafe_allow_html=True)
-st.write("")
-st.markdown("### Visit or contact us")
-st.markdown('<div class="review-card"><b>Heritage Oak Furniture Studio</b><p><b>Showroom address:</b> O.P. Jindal Global University, Sonipat, Haryana, India</p><p>For enquiries, please use the store contact details provided by the project team.</p></div>', unsafe_allow_html=True)
 st.divider()
 st.markdown("## Build your furniture estimate")
-st.markdown('<p class="section-intro">Choose your furniture and options below. Your itemized estimate updates automatically.</p>', unsafe_allow_html=True)
+st.markdown('<p class="section-intro">Choose a furniture category, browse three named designs with photos, and build your estimate. Your itemized total updates automatically.</p>', unsafe_allow_html=True)
 
 # Give every input its starting value the first time the page opens
 for key, value in DEFAULTS.items():
@@ -413,6 +434,21 @@ with left_column:
     category = st.pills(
       "Furniture category", list(FURNITURE_PRICES.keys()),
       format_func=category_label, key="category",
+    )
+    st.markdown("**Choose your preferred design**")
+    design_options = PRODUCT_DESIGNS[category]
+    design_columns = st.columns(3, gap="small")
+    for design_col, (design_name, design_desc, design_image) in zip(design_columns, design_options):
+      with design_col:
+        st.image(design_image, use_container_width=True)
+        st.markdown(f"**{design_name}**")
+        st.caption(design_desc)
+    design = st.radio(
+      "Select a design",
+      [item[0] for item in design_options],
+      key="design_" + category,
+      horizontal=False,
+      label_visibility="collapsed",
     )
     # Widget 2: pills - material
     material = st.pills(
@@ -516,7 +552,7 @@ with right_column:
     f'<div class="preview-card">'
     f'<div class="preview-icon">{CATEGORY_ICONS.get(category, "")}</div>'
     f'<div><div class="preview-title">{bill["quantity"]} × {category}</div>'
-    f'<div>{chips_html}</div></div></div>',
+    f'<div><b>Design:</b> {design}</div><div>{chips_html}</div></div></div>',
     unsafe_allow_html=True,
   )
 
@@ -571,7 +607,7 @@ with right_column:
       quote_lines = [
         "HERITAGE OAK FURNITURE STUDIO - ESTIMATE",
         "-" * 44,
-        f"Order: {bill['quantity']} x {category} ({material}, {size})",
+        f"Order: {bill['quantity']} x {category} - {design} ({material}, {size})",
         f"Customer type: {customer_type}",
         "-" * 44,
       ]
@@ -655,3 +691,32 @@ All prices are estimates in Indian rupees and are assumed to include GST.
 
 st.write("")
 st.caption("Heritage Oak Furniture Studio | Built with Python and Streamlit")
+
+# ----------------------------------------------------------------------------
+# 10. INFORMATION SECTIONS (placed below the furniture estimate)
+# ----------------------------------------------------------------------------
+st.divider()
+st.markdown("## How it works")
+steps = [
+  ("01", "Choose your piece", "Select a furniture category and one of its three designs."),
+  ("02", "Make it yours", "Choose material, size and quantity, then add customization if needed."),
+  ("03", "Select delivery", "Choose standard or express delivery for your order."),
+  ("04", "See your estimate", "Review the itemized calculation, applicable savings and final estimate."),
+]
+step_cols = st.columns(4, gap="medium")
+for col, (number, title, description) in zip(step_cols, steps):
+  with col:
+    st.markdown(
+      f'<div class="step-card"><div class="step-number">{number}</div>'
+      f'<div class="step-title">{title}</div><div>{description}</div></div>',
+      unsafe_allow_html=True,
+    )
+
+st.write("")
+st.markdown("## Visit Us")
+st.markdown(
+  '<div class="review-card"><b>Heritage Oak Furniture Studio</b>'
+  '<p><b>Showroom address:</b> O.P. Jindal Global University, Sonipat, Haryana, India</p>'
+  '<p>For enquiries, please use the store contact details provided by the salesman.</p></div>',
+  unsafe_allow_html=True,
+)
