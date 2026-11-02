@@ -302,6 +302,92 @@ def load_preset(preset_name):
     st.session_state[key] = value
   st.toast("Loaded: " + preset_name)
 
+def calculate_multi_order(items, delivery, customer_type):
+  """Calculate several furniture lines with one delivery fee and one order discount."""
+  if not items:
+    raise ValueError("Please add at least one furniture piece.")
+
+  calculated_items = []
+  goods_total = 0
+  for item in items:
+    line = calculate_bill(
+      item["category"], item["material"], item["size"], item["quantity"],
+      item["customization"], "Standard", "Regular",
+    )
+    line["design"] = item["design"]
+    line["category"] = item["category"]
+    line["material"] = item["material"]
+    line["size"] = item["size"]
+    calculated_items.append(line)
+    goods_total += line["goods_total"]
+
+  if delivery == "Standard":
+    delivery_charges = STANDARD_DELIVERY_CHARGE
+  elif delivery == "Express":
+    delivery_charges = EXPRESS_DELIVERY_CHARGE
+  else:
+    raise ValueError("Please select a valid delivery option.")
+
+  if customer_type == "Premium":
+    premium_extra = PREMIUM_EXTRA_DISCOUNT
+  elif customer_type == "Regular":
+    premium_extra = 0
+  else:
+    raise ValueError("Please select a valid customer type.")
+
+  if goods_total >= SLAB_HIGH:
+    slab_discount = RATE_HIGH
+  elif goods_total >= SLAB_MID:
+    slab_discount = RATE_MID
+  elif goods_total >= SLAB_LOW:
+    slab_discount = RATE_LOW
+  else:
+    slab_discount = 0
+
+  discount_percent = min(slab_discount + premium_extra, 15)
+  discount_amount = round(goods_total * discount_percent / 100)
+  subtotal = goods_total + delivery_charges
+  final_bill = max(subtotal - discount_amount, 0)
+  furniture_total = sum(item["furniture_total"] for item in calculated_items)
+  customization_total = sum(item["customization_charges"] for item in calculated_items)
+
+  return {
+    "items": calculated_items,
+    "goods_total": goods_total,
+    "furniture_total": furniture_total,
+    "customization_charges": customization_total,
+    "delivery_charges": delivery_charges,
+    "subtotal": subtotal,
+    "discount_percent": discount_percent,
+    "discount_amount": discount_amount,
+    "final_bill": final_bill,
+  }
+
+
+def add_order_item():
+  """Add another furniture line, up to ten different pieces."""
+  if len(st.session_state.order_items) < 10:
+    new_id = st.session_state.next_order_item_id
+    st.session_state.order_items.append({"id": new_id})
+    st.session_state.next_order_item_id += 1
+  else:
+    st.toast("You can add up to 10 different furniture pieces per estimate.")
+
+
+def remove_order_item(item_id):
+  """Remove a furniture line while keeping at least one line in the estimate."""
+  if len(st.session_state.order_items) > 1:
+    st.session_state.order_items = [x for x in st.session_state.order_items if x["id"] != item_id]
+
+
+def reset_multi_order():
+  """Reset the estimate to one fresh furniture line and default order settings."""
+  st.session_state.order_items = [{"id": 1}]
+  st.session_state.next_order_item_id = 2
+  st.session_state.order_delivery = "Standard"
+  st.session_state.order_customer_type = "Regular"
+  st.session_state.order_budget = 100000
+
 
 # -----------------------------------------------------------------------------
 # 4. STYLING (CSS = the colours and look: forest green, warm cream, honey gold and terracotta)
@@ -439,295 +525,186 @@ for key, value in DEFAULTS.items():
     st.session_state[key] = value
 
 # -----------------------------------------------------------------------------
-# 6. QUICK START BUTTONS (each button fills in a full order in one click)
+# 6. MULTI-ITEM ORDER BUILDER
 # -----------------------------------------------------------------------------
-st.markdown("** Quick start ideas**")
-preset_names = list(PRESETS.keys())       # a list of the button names
-preset_columns = st.columns(4)
-for position in range(len(preset_names)):    # loop over the 3 preset buttons
-  with preset_columns[position]:
-    st.button(
-      preset_names[position],
-      on_click=load_preset,
-      args=(preset_names[position],),
-      key="preset_button_" + str(position),
+if "order_items" not in st.session_state:
+  st.session_state.order_items = [{"id": 1}]
+  st.session_state.next_order_item_id = 2
+if "order_delivery" not in st.session_state:
+  st.session_state.order_delivery = "Standard"
+if "order_customer_type" not in st.session_state:
+  st.session_state.order_customer_type = "Regular"
+if "order_budget" not in st.session_state:
+  st.session_state.order_budget = 100000
+
+st.markdown("**Build one estimate for your entire furniture order**")
+st.caption("Add a sofa, bed, dining table, wardrobe or study table. Each piece can have its own design, material, size and quantity. Delivery is charged once per order.")
+add_col, reset_col, count_col = st.columns([1.4, 1, 2])
+with add_col:
+  st.button("＋ Add another furniture piece", on_click=add_order_item, use_container_width=True, disabled=len(st.session_state.order_items) >= 10)
+with reset_col:
+  st.button("Reset estimate", on_click=reset_multi_order, use_container_width=True)
+with count_col:
+  st.markdown(f"<div style='padding:9px 4px;color:#53652D;font-weight:700;'> {len(st.session_state.order_items)} of 10 furniture pieces added</div>", unsafe_allow_html=True)
+
+order_lines = []
+for position, order_item in enumerate(st.session_state.order_items, start=1):
+  item_id = order_item["id"]
+  with st.container(border=True):
+    heading_col, remove_col = st.columns([5, 1])
+    with heading_col:
+      st.subheader(f"Furniture piece {position}")
+    with remove_col:
+      if len(st.session_state.order_items) > 1:
+        st.button("Remove", key=f"remove_item_{item_id}", on_click=remove_order_item, args=(item_id,), use_container_width=True)
+
+    category = st.selectbox(
+      "Furniture category", list(FURNITURE_PRICES.keys()), key=f"item_{item_id}_category"
     )
-with preset_columns[3]:
-  st.button(" Reset / Start over", on_click=reset_form)
-
-st.write("")
-
-# Two columns: inputs on the left, results on the right
-left_column, right_column = st.columns(2, gap="large")
-
-# -----------------------------------------------------------------------------
-# 7. USER INPUTS (left column) - 8 widgets of 6 different types
-# -----------------------------------------------------------------------------
-with left_column:
-  with st.container(border=True, key="card_furniture"):
-    st.subheader("1. Choose your furniture")
-    # Widget 1: pills (click-to-select buttons) - furniture category
-    category = st.pills(
-      "Furniture category", list(FURNITURE_PRICES.keys()),
-      format_func=category_label, key="category",
-    )
-    st.markdown("**Choose Your Furniture Design**")
-    st.caption("Explore three photographed styles and select the one you love.")
     design_options = PRODUCT_DESIGNS[category]
-    design_columns = st.columns(3, gap="small")
-    for design_col, (design_name, design_desc, design_image) in zip(design_columns, design_options):
-      with design_col:
+    image_cols = st.columns(3, gap="medium")
+    for image_col, (design_name, design_desc, design_image) in zip(image_cols, design_options):
+      with image_col:
         st.image(image_bytes(design_image), use_container_width=True)
         st.markdown(f"**{design_name}**")
         st.caption(design_desc)
-    design = st.radio(
-      "Select a design",
-      [item[0] for item in design_options],
-      key="design_" + category,
-      horizontal=False,
-      label_visibility="collapsed",
-    )
-    # Widget 2: pills - material
-    material = st.pills(
-      "Material", ["Engineered Wood", "Solid Wood", "Metal"], key="material"
-    )
-    # Widget 3: radio buttons - size
-    size = st.radio(
-      "Size", ["Small", "Medium", "Large"], horizontal=True, key="size"
-    )
-    # Widget 4: number_input - quantity (min/max stop invalid values)
-    quantity = st.number_input(
-      "Quantity (number of items)",
-      min_value=MIN_QUANTITY,
-      max_value=MAX_QUANTITY,
-      step=1,
-      key="quantity",
+    design = st.selectbox(
+      "Choose this piece's design", [x[0] for x in design_options], key=f"item_{item_id}_design"
     )
 
-  with st.container(border=True, key="card_extras"):
-    st.subheader("2. Extras and delivery")
-    # Widget 5: checkbox - returns True or False
-    wants_customization = st.checkbox(
+    material_col, size_col, quantity_col = st.columns(3)
+    with material_col:
+      material = st.selectbox("Material", ["Engineered Wood", "Solid Wood", "Metal"], key=f"item_{item_id}_material")
+    with size_col:
+      size = st.selectbox("Size", ["Small", "Medium", "Large"], index=1, key=f"item_{item_id}_size")
+    with quantity_col:
+      quantity = st.number_input("Quantity", min_value=MIN_QUANTITY, max_value=MAX_QUANTITY, value=1, step=1, key=f"item_{item_id}_quantity")
+    customization = st.checkbox(
       f"Add customization (+{format_rupees(CUSTOMIZATION_CHARGE_PER_ITEM)} per item)",
-      key="customization",
+      key=f"item_{item_id}_customization",
     )
-    # Widget 6: selectbox - delivery type
-    delivery = st.selectbox(
-      "Delivery type", ["Standard", "Express"], key="delivery"
-    )
-    st.caption(
-      f"Standard: {format_rupees(STANDARD_DELIVERY_CHARGE)}, "
-      f"{DELIVERY_DAYS['Standard']}  |  "
-      f"Express: {format_rupees(EXPRESS_DELIVERY_CHARGE)}, "
-      f"{DELIVERY_DAYS['Express']}"
-    )
+    order_lines.append({
+      "category": category, "design": design, "material": material,
+      "size": size, "quantity": quantity, "customization": customization,
+    })
 
-  with st.container(border=True, key="card_customer"):
-    st.subheader("3. You and your budget")
-    # Widget 7: radio buttons - customer type
-    customer_type = st.radio(
-      "Customer type", ["Regular", "Premium"], horizontal=True, key="customer_type"
-    )
-    st.caption(f"Premium customers get an extra {PREMIUM_EXTRA_DISCOUNT}% discount.")
-    # Widget 8: slider - the customer's budget
-    budget = st.slider(
-      "Your budget (₹)", min_value=10000, max_value=500000, step=5000, key="budget"
-    )
+st.markdown("### Order-wide preferences")
+preference_col, customer_col, budget_col = st.columns(3)
+with preference_col:
+  delivery = st.selectbox("Delivery for the complete order", ["Standard", "Express"], key="order_delivery")
+  st.caption(f"Standard: {format_rupees(STANDARD_DELIVERY_CHARGE)} · {DELIVERY_DAYS['Standard']} | Express: {format_rupees(EXPRESS_DELIVERY_CHARGE)} · {DELIVERY_DAYS['Express']}")
+with customer_col:
+  customer_type = st.radio("Customer type", ["Regular", "Premium"], horizontal=True, key="order_customer_type")
+  st.caption(f"Premium customers receive an extra {PREMIUM_EXTRA_DISCOUNT}% discount.")
+with budget_col:
+  budget = st.slider("Your total order budget (₹)", min_value=10000, max_value=1000000, step=5000, key="order_budget")
 
 # -----------------------------------------------------------------------------
-# 8. CALCULATION WITH ERROR HANDLING
+# 7. CALCULATE THE COMPLETE ORDER
 # -----------------------------------------------------------------------------
 try:
-  bill = calculate_bill(
-    category, material, size, quantity,
-    wants_customization, delivery, customer_type,
-  )
+  bill = calculate_multi_order(order_lines, delivery, customer_type)
 except ValueError as error:
-  # Friendly message for invalid input - the app does not crash
-  with right_column:
-    st.error(f"️ {error}")
+  st.error(str(error))
   st.stop()
-except Exception:
-  # Safety net for any unexpected problem
-  with right_column:
-    st.error("️ Something went wrong. Please check your inputs and try again.")
+except Exception as error:
+  st.error("Something went wrong while calculating the estimate. Please check your selections.")
   st.stop()
 
-# The list of (label, amount) pairs used for the table and the downloadable quote
+st.markdown("## Your Combined Furniture Estimate")
+summary_cols = st.columns(3)
+summary_cols[0].metric("Furniture pieces", len(order_lines))
+summary_cols[1].metric("Goods value", format_rupees(bill["goods_total"]))
+summary_cols[2].metric("Items in order", sum(int(x["quantity"]) for x in order_lines))
+
+with st.container(border=True):
+  st.markdown("### Order summary")
+  summary_rows = []
+  for index, line in enumerate(bill["items"], start=1):
+    customization_label = " + customization" if line["customization_charges"] else ""
+    summary_rows.append({
+      "Piece": index,
+      "Furniture": line["category"],
+      "Design": line["design"],
+      "Material": line["material"],
+      "Size": line["size"],
+      "Qty": line["quantity"],
+      "Line total": format_rupees(line["goods_total"]),
+    })
+  st.dataframe(summary_rows, use_container_width=True, hide_index=True)
+
 breakdown_rows = [
-  (f"Base price ({format_rupees(bill['base_price'])} × {bill['quantity']})",
-   bill["base_price"] * bill["quantity"]),
-  (f"Material adjustment ({material})",
-   bill["material_adjustment"] * bill["quantity"]),
-  (f"Size adjustment ({size})",
-   bill["size_adjustment"] * bill["quantity"]),
-  ("Furniture total", bill["furniture_total"]),
+  ("Furniture and material/size adjustments", bill["furniture_total"]),
   ("Customization charges", bill["customization_charges"]),
-  (f"Delivery charges ({delivery})", bill["delivery_charges"]),
+  ("Goods total", bill["goods_total"]),
+  (f"Delivery charges ({delivery}, charged once)", bill["delivery_charges"]),
   ("Subtotal", bill["subtotal"]),
-  (f"Discount ({bill['discount_percent']}% on furniture + customization)",
-   -bill["discount_amount"]),
+  (f"Discount ({bill['discount_percent']}% on goods total)", -bill["discount_amount"]),
 ]
 
-# -----------------------------------------------------------------------------
-# 9. RESULTS (right column) - live preview, then 3 tabs
-# -----------------------------------------------------------------------------
-with right_column:
-  # ---- Live preview card: reacts to every choice ----
-  chips_html = (
-    f'<span class="chip chip-beige"><span class="swatch" '
-    f'style="background:{MATERIAL_COLORS.get(material, "#D9B98A")}"></span>{material}</span>'
-    f'<span class="chip chip-yellow">{size} size</span>'
-    f'<span class="chip chip-blue"> {delivery}: {DELIVERY_DAYS[delivery]}</span>'
-  )
-  if wants_customization:
-    chips_html = chips_html + '<span class="chip chip-yellow"> Customized</span>'
-  if customer_type == "Premium":
-    chips_html = chips_html + '<span class="chip chip-blue">⭐ Premium</span>'
-
+result_left, result_right = st.columns([1.15, 1])
+with result_left:
   st.markdown(
-    f'<div class="preview-card">'
-    f'<div class="preview-icon">{CATEGORY_ICONS.get(category, "")}</div>'
-    f'<div><div class="preview-title">{bill["quantity"]} × {category}</div>'
-    f'<div><b>Design:</b> {design}</div><div>{chips_html}</div></div></div>',
+    f'<div class="bill-box"><div class="bill-label">ESTIMATED FINAL ORDER BILL</div>'
+    f'<div class="bill-amount">{format_rupees(bill["final_bill"])}</div>'
+    f'<div class="bill-note">Subtotal {format_rupees(bill["subtotal"])} − Discount {format_rupees(bill["discount_amount"])}</div></div>',
     unsafe_allow_html=True,
   )
+  if bill["discount_percent"] > 0:
+    st.success(f"You save {format_rupees(bill['discount_amount'])} with a {bill['discount_percent']}% order discount.")
+  else:
+    st.info("Add goods worth ₹40,000 or more to unlock an order-value discount.")
+  goal_amount, goal_percent = get_next_discount_goal(bill["goods_total"])
+  if goal_amount is None:
+    st.success("Highest order-value discount unlocked!")
+    st.progress(1.0)
+  else:
+    st.write(f"Add {format_rupees(goal_amount - bill['goods_total'])} more in goods to reach the {goal_percent}% discount slab.")
+    st.progress(min(bill["goods_total"] / goal_amount, 1.0))
+with result_right:
+  st.markdown("### Cost breakdown")
+  table_text = "| Cost item | Amount |\n|---|---:|\n"
+  for label, amount in breakdown_rows:
+    table_text += f"| {label} | {format_rupees(amount)} |\n"
+  st.markdown(table_text)
+  st.markdown(f"**Your budget:** {format_rupees(budget)}")
+  if bill["final_bill"] <= budget:
+    st.success(f"Within budget. You have {format_rupees(budget - bill['final_bill'])} remaining.")
+  else:
+    st.warning(f"Over budget by {format_rupees(bill['final_bill'] - budget)}. Try a smaller size, a different material or fewer customization options.")
+  st.progress(min(bill["final_bill"] / budget, 1.0))
 
-  with st.container(border=True, key="card_results"):
-    tab_summary, tab_breakdown, tab_prices = st.tabs(
-      [" Your bill", " Cost breakdown", " Price list"]
-    )
+# Build one downloadable quote containing every piece and the combined order totals.
+quote_lines = [
+  "HERITAGE OAK FURNITURE STUDIO - MULTI-ITEM ESTIMATE",
+  "=" * 56,
+  f"Number of furniture pieces: {len(order_lines)}",
+  f"Customer type: {customer_type}",
+  f"Delivery: {delivery} ({DELIVERY_DAYS[delivery]})",
+  "",
+]
+for index, line in enumerate(bill["items"], start=1):
+  quote_lines.extend([
+    f"PIECE {index}: {line['category']} - {line['design']}",
+    f"Material: {line['material']} | Size: {line['size']} | Quantity: {line['quantity']}",
+    f"Furniture: {format_rupees(line['furniture_total'])}",
+    f"Customization: {format_rupees(line['customization_charges'])}",
+    f"Goods total: {format_rupees(line['goods_total'])}",
+    "",
+  ])
+for label, amount in breakdown_rows:
+  quote_lines.append(f"{label}: {format_rupees(amount)}")
+quote_lines.extend(["=" * 56, f"FINAL ESTIMATED BILL: {format_rupees(bill['final_bill'])}", "This is an estimate; confirm final specifications and applicable taxes with the store."])
+quote_text = "\n".join(quote_lines)
+quote_col1, quote_col2 = st.columns([1, 1])
+with quote_col1:
+  if st.button("Confirm this estimate", use_container_width=True):
+    st.balloons()
+    st.toast("Estimate confirmed! Please contact the showroom to finalise your order.")
+with quote_col2:
+  st.download_button("Download combined quotation", data=quote_text, file_name="heritage_oak_multi_item_quote.txt", mime="text/plain", use_container_width=True)
 
-    # ---------------- TAB 1: the final bill, discount meter, budget ----------------
-    with tab_summary:
-      st.markdown(
-        f'<div class="bill-box">'
-        f'<div class="bill-label">ESTIMATED FINAL BILL</div>'
-        f'<div class="bill-amount">{format_rupees(bill["final_bill"])}</div>'
-        f'<div class="bill-note">Subtotal {format_rupees(bill["subtotal"])} '
-        f'− Discount {format_rupees(bill["discount_amount"])}</div></div>',
-        unsafe_allow_html=True,
-      )
-
-      # Discount message
-      if bill["discount_percent"] > 0:
-        st.success(f" You saved {format_rupees(bill['discount_amount'])} "
-              f"({bill['discount_percent']}% discount applied).")
-      else:
-        st.info("No discount yet. Order goods worth ₹40,000 or more to unlock one.")
-
-      # Discount meter: how close is the customer to the next slab?
-      goal_amount, goal_percent = get_next_discount_goal(bill["goods_total"])
-      if goal_amount is None:
-        st.markdown(" **Highest order-value discount unlocked!**")
-        st.progress(1.0)
-      else:
-        still_needed = goal_amount - bill["goods_total"]
-        st.markdown(
-          f" **Add {format_rupees(still_needed)} more** of furniture "
-          f"to unlock a **{goal_percent}%** order discount."
-        )
-        st.progress(min(bill["goods_total"] / goal_amount, 1.0))
-
-      # Budget check
-      st.markdown(f" **Your budget: {format_rupees(budget)}**")
-      if bill["final_bill"] <= budget:
-        money_left = budget - bill["final_bill"]
-        st.success(f" Within budget! You still have {format_rupees(money_left)} left.")
-      else:
-        money_over = bill["final_bill"] - budget
-        st.warning(f"️ Over budget by {format_rupees(money_over)}. "
-              "Try a smaller size, Engineered Wood, or Standard delivery.")
-      st.progress(min(bill["final_bill"] / budget, 1.0))
-
-      # Build the text of the downloadable quote using a list and a loop
-      quote_lines = [
-        "HERITAGE OAK FURNITURE STUDIO - ESTIMATE",
-        "-" * 44,
-        f"Order: {bill['quantity']} x {category} - {design} ({material}, {size})",
-        f"Customer type: {customer_type}",
-        "-" * 44,
-      ]
-      for label, amount in breakdown_rows:
-        quote_lines.append(f"{label}: {format_rupees(amount)}")
-      quote_lines.append("-" * 44)
-      quote_lines.append(f"FINAL BILL: {format_rupees(bill['final_bill'])}")
-      quote_lines.append("This is an estimate. Prices include GST.")
-      quote_text = "\n".join(quote_lines)
-
-      button_left, button_right = st.columns(2)
-      with button_left:
-        # A button returns True only on the run when it is clicked
-        if st.button(" Confirm my estimate", key="confirm_button"):
-          st.balloons()
-          st.toast("Estimate confirmed! Show it at our store.")
-      with button_right:
-        st.download_button(
-          " Download my quote",
-          data=quote_text,
-          file_name="heritage_oak_quote.txt",
-          mime="text/plain",
-        )
-
-    # ---------------- TAB 2: itemized table and cost share bars ----------------
-    with tab_breakdown:
-      st.markdown("**Itemized cost breakdown**")
-      # Build a markdown table row by row using a for loop
-      table_text = "| Cost item | Amount |\n|---|---:|\n"
-      for label, amount in breakdown_rows:
-        table_text = table_text + f"| {label} | {format_rupees(amount)} |\n"
-      st.markdown(table_text)
-
-      st.markdown("**Where your money goes (before discount)**")
-      # (label, amount, colour class) for each bar
-      cost_parts = [
-        ("Furniture", bill["furniture_total"], "fill-brown"),
-        ("Customization", bill["customization_charges"], "fill-yellow"),
-        ("Delivery", bill["delivery_charges"], "fill-blue"),
-      ]
-      bars_html = ""
-      for label, amount, color_class in cost_parts:
-        percent = round(amount * 100 / bill["subtotal"])  # share of the subtotal
-        bars_html = bars_html + (
-          f'<div class="bar-row"><div class="bar-label">{label} ({percent}%)</div>'
-          f'<div class="bar-track"><div class="bar-fill {color_class}" '
-          f'style="width:{percent}%"></div></div>'
-          f'<div class="bar-value">{format_rupees(amount)}</div></div>'
-        )
-      st.markdown(bars_html, unsafe_allow_html=True)
-
-    # ---------------- TAB 3: price list and pricing rules ----------------
-    with tab_prices:
-      st.markdown("**Base price per item**")
-      price_text = "| Category | Base price |\n|---|---:|\n"
-      for name, price in FURNITURE_PRICES.items():
-        price_text = price_text + f"| {CATEGORY_ICONS[name]} {name} | {format_rupees(price)} |\n"
-      st.markdown(price_text)
-
-      st.markdown(
-        f"""
-**Adjustments (percentage of base price)**
-- Material: Engineered Wood +0%, Solid Wood +30%, Metal +10%
-- Size: Small −10%, Medium +0%, Large +25%
-
-**Charges**
-- Customization: {format_rupees(CUSTOMIZATION_CHARGE_PER_ITEM)} per item
-- Delivery (per order): Standard {format_rupees(STANDARD_DELIVERY_CHARGE)}, Express {format_rupees(EXPRESS_DELIVERY_CHARGE)}
-
-**Discount rule** (on furniture + customization; delivery is not discounted)
-- Goods value ₹40,000 or more: 5% | ₹75,000 or more: 7% | ₹1,50,000 or more: 10%
-- Premium customers get an extra 5%
-
-**Formulas**
-- Subtotal = (Base + Material + Size) × Quantity + Customization + Delivery
-- Final Bill = Subtotal − Discount (never below ₹0)
-
-All prices are estimates in Indian rupees and are assumed to include GST.
-        """
-      )
-
-st.write("")
-st.caption("Heritage Oak Furniture Studio | Built with Python and Streamlit")
+st.caption("Delivery is charged once per order. The order discount is calculated on the combined furniture and customization value; delivery is not discounted.")
 
 # -----------------------------------------------------------------------------
 # 10. INFORMATION SECTIONS, SHOWROOM AND SAMPLE REVIEWS
@@ -738,7 +715,7 @@ with info_left:
   st.markdown('<div id="how-it-works"></div>', unsafe_allow_html=True)
   st.markdown("## How It Works")
   st.markdown('<p class="section-intro">A simple four-step journey from choice to quote.</p>', unsafe_allow_html=True)
-  steps = [("01", "Choose your piece", "Select a furniture category and one of its three designs."), ("02", "Make it yours", "Choose material, size and quantity, then add customization if needed."), ("03", "Select delivery", "Choose standard or express delivery for your order."), ("04", "Get your estimate", "Review your itemized calculation, savings and final estimate.")]
+  steps = [("01", "Add your furniture pieces", "Add one or several categories and select a photographed design for each."), ("02", "Customise each piece", "Choose its material, size, quantity and optional customization."), ("03", "Set order preferences", "Choose one delivery option and your customer type for the complete order."), ("04", "Get one combined estimate", "Review itemised costs, one delivery charge, order discount and final total.")]
   for number, title, description in steps:
     st.markdown(f'<div class="step-card horizontal-step"><div class="step-number">{number}</div><div><div class="step-title">{title}</div><div>{description}</div></div></div>', unsafe_allow_html=True)
 with info_right:
