@@ -264,6 +264,8 @@ def calculate_bill(category, material, size, quantity,
     "delivery_charges": delivery_charges,
     "subtotal": subtotal,
     "discount_percent": discount_percent,
+    "payment_extra_discount": payment_extra,
+    "payment_method": payment_method,
     "discount_amount": discount_amount,
     "final_bill": final_bill,
   }
@@ -302,8 +304,8 @@ def load_preset(preset_name):
     st.session_state[key] = value
   st.toast("Loaded: " + preset_name)
 
-def calculate_multi_order(items, delivery, customer_type):
-  """Calculate several furniture lines with one delivery fee and one order discount."""
+def calculate_multi_order(items, delivery, customer_type, payment_method):
+  """Calculate several furniture lines with one delivery fee and order/payment discounts."""
   if not items:
     raise ValueError("Please add at least one furniture piece.")
 
@@ -344,7 +346,11 @@ def calculate_multi_order(items, delivery, customer_type):
   else:
     slab_discount = 0
 
-  discount_percent = min(slab_discount + premium_extra, 15)
+  payment_extra = 5 if payment_method in ("Net Banking", "UPI / Online Payment") else 0
+  if payment_method not in ("Cash / At Showroom", "Net Banking", "UPI / Online Payment"):
+    raise ValueError("Please select a valid payment method.")
+  # Overall discount is capped at 20% to protect business margins.
+  discount_percent = min(slab_discount + premium_extra + payment_extra, 20)
   discount_amount = round(goods_total * discount_percent / 100)
   subtotal = goods_total + delivery_charges
   final_bill = max(subtotal - discount_amount, 0)
@@ -359,6 +365,8 @@ def calculate_multi_order(items, delivery, customer_type):
     "delivery_charges": delivery_charges,
     "subtotal": subtotal,
     "discount_percent": discount_percent,
+    "payment_extra_discount": payment_extra,
+    "payment_method": payment_method,
     "discount_amount": discount_amount,
     "final_bill": final_bill,
   }
@@ -599,11 +607,25 @@ with customer_col:
 with budget_col:
   budget = st.slider("Your total order budget (₹)", min_value=10000, max_value=1000000, step=5000, key="order_budget")
 
+# Payment choice is an order-wide preference, shown before the combined estimate.
+st.markdown("### Payment method")
+payment_method = st.radio(
+  "Choose how you plan to pay",
+  ["Cash / At Showroom", "Net Banking", "UPI / Online Payment"],
+  horizontal=True,
+  key="order_payment_method",
+  help="This selection applies an estimated payment discount only. It does not collect or process a payment.",
+)
+if payment_method == "Cash / At Showroom":
+  st.caption("No additional payment discount.")
+else:
+  st.success("You qualify for an additional 5% online payment discount. The total combined discount is capped at 20% of goods value.")
+
 # -----------------------------------------------------------------------------
 # 7. CALCULATE THE COMPLETE ORDER
 # -----------------------------------------------------------------------------
 try:
-  bill = calculate_multi_order(order_lines, delivery, customer_type)
+  bill = calculate_multi_order(order_lines, delivery, customer_type, payment_method)
 except ValueError as error:
   st.error(str(error))
   st.stop()
@@ -639,7 +661,7 @@ breakdown_rows = [
   ("Goods total", bill["goods_total"]),
   (f"Delivery charges ({delivery}, charged once)", bill["delivery_charges"]),
   ("Subtotal", bill["subtotal"]),
-  (f"Discount ({bill['discount_percent']}% on goods total)", -bill["discount_amount"]),
+  (f"Total discount ({bill['discount_percent']}% on goods total; includes payment offer)", -bill["discount_amount"]),
 ]
 
 result_left, result_right = st.columns([1.15, 1])
@@ -681,6 +703,8 @@ quote_lines = [
   f"Number of furniture pieces: {len(order_lines)}",
   f"Customer type: {customer_type}",
   f"Delivery: {delivery} ({DELIVERY_DAYS[delivery]})",
+  f"Payment method: {payment_method}",
+  f"Additional payment discount: {bill['payment_extra_discount']}%",
   "",
 ]
 for index, line in enumerate(bill["items"], start=1):
@@ -704,7 +728,7 @@ with quote_col1:
 with quote_col2:
   st.download_button("Download combined quotation", data=quote_text, file_name="heritage_oak_multi_item_quote.txt", mime="text/plain", use_container_width=True)
 
-st.caption("Delivery is charged once per order. The order discount is calculated on the combined furniture and customization value; delivery is not discounted.")
+st.caption("Delivery is charged once per order. Discounts apply to the combined furniture and customization value, not delivery. Net Banking and UPI/online payment receive an additional 5% offer; the total discount is capped at 20%. Selecting a payment method does not process a real payment.")
 
 # -----------------------------------------------------------------------------
 # 10. INFORMATION SECTIONS, SHOWROOM AND SAMPLE REVIEWS
