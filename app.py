@@ -264,8 +264,6 @@ def calculate_bill(category, material, size, quantity,
     "delivery_charges": delivery_charges,
     "subtotal": subtotal,
     "discount_percent": discount_percent,
-    "payment_extra_discount": payment_extra,
-    "payment_method": payment_method,
     "discount_amount": discount_amount,
     "final_bill": final_bill,
   }
